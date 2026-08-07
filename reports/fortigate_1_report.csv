@@ -1,0 +1,15 @@
+type_finding,policyid,nom,detail
+policy_non_utilisee,2,ALLOW_LAN_TO_WEB_000,hit_count=0
+policy_non_utilisee,3,ALLOW_LAN_TO_WEB_001,hit_count=0
+policy_potentiellement_shadowee,3,ALLOW_LAN_TO_WEB_001,masquee par policy 2 (ALLOW_LAN_TO_WEB_000)
+policy_doublon,3,ALLOW_LAN_TO_WEB_001,identique a policy 2 (ALLOW_LAN_TO_WEB_000)
+adresse_orpheline,-,EMS_ALL_UNKNOWN_CLIENTS,non referencee dans aucune policy/groupe
+adresse_orpheline,-,EMS_ALL_UNMANAGEABLE_CLIENTS,non referencee dans aucune policy/groupe
+adresse_orpheline,-,FABRIC_DEVICE,non referencee dans aucune policy/groupe
+adresse_orpheline,-,FIREWALL_AUTH_PORTAL_ADDRESS,non referencee dans aucune policy/groupe
+adresse_orpheline,-,SSLVPN_TUNNEL_ADDR1,non referencee dans aucune policy/groupe
+adresse_orpheline,-,all,non referencee dans aucune policy/groupe
+adresse_orpheline,-,none,non referencee dans aucune policy/groupe
+adresse_orpheline,-,wildcard.dropbox.com,non referencee dans aucune policy/groupe
+groupe_orphelin,-,G Suite,non reference dans aucune policy/groupe
+groupe_orphelin,-,Microsoft Office 365,non reference dans aucune policy/groupe

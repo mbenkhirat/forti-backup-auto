@@ -1,0 +1,61 @@
+---
+- name: Automatisation de la création d'objets et de politiques sur FortiGate
+  hosts: fortigate_1
+  collections:
+    - fortinet.fortios
+  gather_facts: false
+  vars:
+    vdom: "root"
+    forti_token: "bGf69N3366srQQ6xzHHhs5yc7b4bbk"
+
+  tasks:
+    # Step 1 : Création de l'objet Adresse Source
+    - name: Créer l'objet Adresse Source (LAN Subnet)
+      fortinet.fortios.fortios_firewall_address:
+        vdom: "{{ vdom }}"
+        access_token: "{{ forti_token }}"
+        state: "present"
+        firewall_address:
+          name: "OBJ_LAN_SUBNET"
+          type: "ipmask"
+          subnet: "192.168.10.0 255.255.255.0"
+          comment: "Réseau LAN interne créé via Ansible"
+
+    # Step 2 : Création de l'objet Adresse Destination
+    - name: Créer l'objet Adresse Destination (Serveur Web)
+      fortinet.fortios.fortios_firewall_address:
+        vdom: "{{ vdom }}"
+        access_token: "{{ forti_token }}"
+        state: "present"
+        firewall_address:
+          name: "OBJ_SERVEUR_WEB"
+          type: "ipmask"
+          subnet: "10.0.0.50 255.255.255.255"
+          comment: "Serveur Web DMZ créé via Ansible"
+
+    # Step 3 : Création de la Politique de Pare-feu (Firewall Policy)
+    - name: Créer la règle de politique de sécurité
+      fortinet.fortios.fortios_firewall_policy:
+        vdom: "{{ vdom }}"
+        access_token: "{{ forti_token }}"
+        state: "present"
+        firewall_policy:
+          policyid: 101                  # ID unique de la politique
+          name: "ALLOW_LAN_TO_WEB"
+          srcintf:
+            - name: "port1"              # Interface d'entrée
+          dstintf:
+            - name: "port2"              # Interface de sortie
+          srcaddr:
+            - name: "OBJ_LAN_SUBNET"     # Objet source créé à l'étape 1
+          dstaddr:
+            - name: "OBJ_SERVEUR_WEB"    # Objet destination créé à l'étape 2
+          service:
+            - name: "HTTP"               # Services autorisés
+            - name: "HTTPS"
+          action: "accept"               # accept / deny
+          schedule: "always"
+          nat: "enable"                  # Activation du NAT (enable / disable)
+          status: "enable"               # Activer la règle (enable / disable)
+          logtraffic: "all"              # Journalisation (all / utm / disable)
+          comments: "Regle creee automatiquement par Ansible"

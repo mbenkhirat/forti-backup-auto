@@ -1,0 +1,43 @@
+---
+- name: Sauvegarde de la configuration FortiGate
+  hosts: fortigate_1
+  gather_facts: false
+  connection: local
+
+  vars:
+    backup_dir: "./backups"
+
+  tasks:
+
+    # Task 1 : Créer le dossier local de sauvegarde
+    - name: Créer le dossier de sauvegarde
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0700'
+      delegate_to: localhost
+      run_once: true
+
+    # Task 2 : Télécharger la sauvegarde via l'API FortiOS
+    - name: Télécharger la configuration via l'API FortiOS
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ fortios_access_token }}"
+        validate_certs: false
+        status_code: 200
+        return_content: true
+        timeout: 60
+      register: config_backup_raw
+      delegate_to: localhost
+      no_log: true
+
+    # Task 3 : Écrire le contenu brut dans le fichier .conf
+    - name: Enregistrer le fichier de configuration .conf
+      ansible.builtin.copy:
+        content: "{{ config_backup_raw.content }}"
+        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ now(utc=true).strftime('%Y%m%dT%H%M%S') }}.conf"
+        mode: '0600'
+      delegate_to: localhost
+      no_log: true

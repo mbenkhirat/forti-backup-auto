@@ -1,0 +1,55 @@
+{
+  "hostname": "fortigate_1",
+  "generated_at": "2026-08-04T18:39:43.319407+00:00",
+  "totals": {
+    "policies": 3,
+    "addresses": 16,
+    "addrgroups": 2
+  },
+  "findings": {
+    "unused_policies": [
+      {
+        "policyid": 2,
+        "name": "ALLOW_LAN_TO_WEB_000",
+        "hit_count": 0
+      },
+      {
+        "policyid": 3,
+        "name": "ALLOW_LAN_TO_WEB_001",
+        "hit_count": 0
+      }
+    ],
+    "permissive_policies": [],
+    "disabled_policies": [],
+    "shadowed_policies": [
+      {
+        "shadowed_policy": 3,
+        "shadowed_name": "ALLOW_LAN_TO_WEB_001",
+        "shadowed_by_policy": 2,
+        "shadowed_by_name": "ALLOW_LAN_TO_WEB_000"
+      }
+    ],
+    "duplicate_policies": [
+      {
+        "policy_a": 2,
+        "policy_b": 3,
+        "name_a": "ALLOW_LAN_TO_WEB_000",
+        "name_b": "ALLOW_LAN_TO_WEB_001"
+      }
+    ],
+    "orphan_addresses": [
+      "EMS_ALL_UNKNOWN_CLIENTS",
+      "EMS_ALL_UNMANAGEABLE_CLIENTS",
+      "FABRIC_DEVICE",
+      "FIREWALL_AUTH_PORTAL_ADDRESS",
+      "SSLVPN_TUNNEL_ADDR1",
+      "all",
+      "none",
+      "wildcard.dropbox.com"
+    ],
+    "orphan_addrgroups": [
+      "G Suite",
+      "Microsoft Office 365"
+    ]
+  }
+}

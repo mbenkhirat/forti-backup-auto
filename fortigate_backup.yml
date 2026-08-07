@@ -1,0 +1,41 @@
+name: FortiGate GitOps Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Tous les jours à 02:00
+  workflow_dispatch:      # Déclenchement manuel
+
+jobs:
+  run-backup:
+    runs-on: self-hosted   # <-- Exécution sur votre VM Ubuntu locale
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Récupérer le code du dépôt (Checkout)
+        uses: actions/checkout@v4
+
+      - name: S'assurer que les dépendances Python & Ansible sont présentes
+        run: |
+          pip install --upgrade pip
+          pip install ansible
+          ansible-galaxy collection install fortinet.fortios
+
+      - name: Exécuter le Playbook de Sauvegarde
+        env:
+          FORTIOS_ACCESS_TOKEN: ${{ secrets.FORTIOS_ACCESS_TOKEN }}
+        run: |
+          ansible-playbook -i inventory.yml backup_and_clean.yml
+
+      - name: Commit et Push des fichiers de sauvegarde sur GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add backups/*.conf
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "chore(backup): auto-backup FortiGate local - $(date +'%Y-%m-%d')"
+            git push
+          else
+            echo "Aucune modification détectée dans la configuration."
+          fi

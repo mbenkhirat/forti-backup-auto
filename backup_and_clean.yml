@@ -1,0 +1,60 @@
+---
+- name: GitOps - Sauvegarde FortiGate et Rétention 02
+  hosts: fortigate_1
+  gather_facts: false
+
+  vars:
+    backup_dir: "./backups"
+    retention_days: 7
+
+  tasks:
+    # 1. Récupérer la date locale
+    - name: Récupérer la date système locale
+      ansible.builtin.setup:
+        filter:
+          - "ansible_date_time"
+      delegate_to: localhost
+      run_once: true
+
+    - name: S'assurer que le dossier de sauvegarde existe
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    # 2. Télécharger la configuration depuis le FortiGate
+    - name: Télécharger la configuration via API FortiOS (POST)
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global&access_token={{ fortios_access_token }}"
+        method: POST
+        validate_certs: false
+        status_code: 200
+        return_content: true
+      register: config_backup_raw
+      delegate_to: localhost
+
+    # 3. Enregistrer le fichier .conf
+    - name: Écrire le fichier de configuration .conf
+      ansible.builtin.copy:
+        content: "{{ config_backup_raw.content }}"
+        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ hostvars['localhost']['ansible_date_time']['date'] }}.conf"
+        mode: '0644'
+      delegate_to: localhost
+
+    # 4. Nettoyer les fichiers de plus de X jours
+    - name: Rechercher les sauvegardes de plus de {{ retention_days }} jours
+      ansible.builtin.find:
+        paths: "{{ backup_dir }}"
+        patterns: "*.conf"
+        age: "{{ retention_days }}d"
+      register: old_backups
+      delegate_to: localhost
+
+    - name: Supprimer les sauvegardes obsolètes
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      when: old_backups.matched > 0
+      delegate_to: localhost

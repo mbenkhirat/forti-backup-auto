@@ -1,0 +1,100 @@
+---
+# audit.yml
+# Extrait les policies, leurs statistiques d'usage (hit_count) et les objets
+# adresses/groupes de chaque FortiGate, puis lance l'analyse Python qui génère
+# un rapport complet + un playbook de nettoyage à valider manuellement.
+
+- name: Audit et extraction des policies FortiGate
+  hosts: fortigate_1
+  gather_facts: false
+  connection: local
+
+  vars:
+    reports_dir: "./reports"
+    raw_dir: "./reports/raw"
+    generated_dir: "./generated"
+
+    # Un seul endroit pour ajouter/retirer un endpoint à extraire.
+    # 'name' sert de suffixe de fichier ET de paramètre CLI pour le script Python.
+    api_endpoints:
+      - { name: "policies", path: "/api/v2/cmdb/firewall/policy" }
+      - { name: "policies_stats", path: "/api/v2/monitor/firewall/policy" }
+      - { name: "addresses", path: "/api/v2/cmdb/firewall/address" }
+      - { name: "addrgroups", path: "/api/v2/cmdb/firewall/addrgrp" }
+
+  # Valeurs communes à toutes les tâches ansible.builtin.uri du play :
+  # plus besoin de les répéter dans chaque tâche.
+  module_defaults:
+    ansible.builtin.uri:
+      headers:
+        Authorization: "Bearer {{ fortios_access_token }}"
+      validate_certs: false
+      status_code: 200
+      return_content: true
+      timeout: 60
+
+  tasks:
+
+    - name: Créer les dossiers de sortie
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0700'
+      loop:
+        - "{{ raw_dir }}"
+        - "{{ generated_dir }}"
+      delegate_to: localhost
+      run_once: true
+
+    # ------------------------------------------------------------------
+    # Récupération de tous les endpoints en une seule tâche bouclée.
+    # (headers/validate_certs/timeout/status_code viennent de module_defaults)
+    # ------------------------------------------------------------------
+    - name: Récupérer les données via l'API FortiOS ({{ item.name }})
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}{{ item.path }}"
+        method: GET
+      loop: "{{ api_endpoints }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: api_results
+      delegate_to: localhost
+      no_log: true
+
+    # ------------------------------------------------------------------
+    # Sauvegarde des extractions brutes (une par hôte), à partir des
+    # résultats de la boucle précédente : plus de répétition manuelle
+    # d'une tâche copy par endpoint.
+    # ------------------------------------------------------------------
+    - name: Sauvegarder les extractions brutes en JSON
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ raw_dir }}/{{ inventory_hostname }}_{{ item.item.name }}.json"
+        mode: '0600'
+      loop: "{{ api_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      delegate_to: localhost
+      no_log: true
+
+    # ------------------------------------------------------------------
+    # Analyse : rapport + playbook de nettoyage
+    # ------------------------------------------------------------------
+    - name: Analyser les policies et générer le rapport + le playbook de nettoyage
+      ansible.builtin.command:
+        cmd: >
+          python3 ./scripts/analyze_policies.py
+          --hostname {{ inventory_hostname }}
+          --policies {{ raw_dir }}/{{ inventory_hostname }}_policies.json
+          --policies-stats {{ raw_dir }}/{{ inventory_hostname }}_policies_stats.json
+          --addresses {{ raw_dir }}/{{ inventory_hostname }}_addresses.json
+          --addrgroups {{ raw_dir }}/{{ inventory_hostname }}_addrgroups.json
+          --report-dir {{ reports_dir }}
+          --cleanup-dir {{ generated_dir }}
+      delegate_to: localhost
+      changed_when: true
+      register: analysis_result
+
+    - name: Afficher le résumé de l'analyse
+      ansible.builtin.debug:
+        msg: "{{ analysis_result.stdout_lines }}"

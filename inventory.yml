@@ -1,0 +1,39 @@
+all:
+  hosts:
+    fortigate_1:
+      ansible_host: "192.168.239.130" # Note : Votre FortiGate doit être joignable publiquement ou via un runner auto-hébergé 02
+      ansible_network_os: fortinet.fortios.fortios
+      ansible_connection: httpapi
+      ansible_httpapi_use_ssl: true
+      ansible_httpapi_validate_certs: false
+      ansible_httpapi_port: 443
+      vdom: "root"
+      fortios_access_token: "{{ lookup('env', 'FORTIOS_ACCESS_TOKEN') }}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# all:
+#   hosts:
+#     fortigate_1:
+#       ansible_host: 192.168.239.130     # IP de gestion de votre FortiGate      
+#       # Paramètres de connexion FortiOS (httpapi)
+#       ansible_network_os: fortinet.fortios.fortios
+#       ansible_connection: httpapi
+#       ansible_httpapi_use_ssl: true
+#       ansible_httpapi_validate_certs: false
+#       ansible_httpapi_port: 443
+
+#       # Variables spécifiques FortiGate
+#       vdom: "root"
+#       fortios_access_token: "bGf69N3366srQQ6xzHHhs5yc7b4bbk"

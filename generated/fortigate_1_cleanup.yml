@@ -1,0 +1,47 @@
+---
+# Playbook de nettoyage généré automatiquement pour fortigate_1
+# Généré le 2026-08-04T18:39:43.322373+00:00
+#
+# CE PLAYBOOK NE FAIT RIEN PAR DÉFAUT.
+# Relisez chaque policy listée ci-dessous avant toute action.
+# Pour appliquer réellement les désactivations :
+#   ansible-playbook -i inventory.yml generated/fortigate_1_cleanup.yml -e apply=true --ask-vault-pass
+#
+- name: Nettoyage des policies suspectes sur fortigate_1
+  hosts: fortigate_1
+  gather_facts: false
+  connection: local
+  vars:
+    apply: false   # passer à true (-e apply=true) pour exécuter réellement
+
+  tasks:
+    - name: "Désactiver policy 2 (ALLOW_LAN_TO_WEB_000) - à valider manuellement"
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/v2/cmdb/firewall/policy/2"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ fortios_access_token }}"
+        body_format: json
+        body:
+          status: disable
+        validate_certs: false
+        status_code: 200
+      delegate_to: localhost
+      no_log: true
+      when: apply | bool
+
+    - name: "Désactiver policy 3 (ALLOW_LAN_TO_WEB_001) - à valider manuellement"
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/v2/cmdb/firewall/policy/3"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ fortios_access_token }}"
+        body_format: json
+        body:
+          status: disable
+        validate_certs: false
+        status_code: 200
+      delegate_to: localhost
+      no_log: true
+      when: apply | bool
+

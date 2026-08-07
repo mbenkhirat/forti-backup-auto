@@ -1,0 +1,61 @@
+---
+- name: Analyse et consolidation des politiques de sécurité FortiGate
+  hosts: fortigate_01
+  collections:
+    - fortinet.fortios
+  gather_facts: no
+  vars:
+    vdom: "root"
+    forti_token: "w054Qs8GhdmG0yhg031jd6f89tGGm4"
+
+  tasks:
+    # 1. Récupération de toutes les politiques de sécurité
+    - name: Récupérer les politiques de sécurité existantes
+      fortios_configuration_fact:
+        vdom: "{{ vdom }}"
+        selector: "firewall_policy"
+      register: policy_facts
+
+    # 2. Filtrage et identification des doublons avec Jinja2
+    - name: Analyser les règles pour trouver les doublons (Même Src et Dst)
+      set_fact:
+        duplicated_policies: >-
+          {%- set results = {} -%}
+          {%- for policy in policy_facts.meta.results -%}
+            {# Extraction des noms des objets source et destination et tri pour comparaison #}
+            {%- set src_list = policy.srcaddr | map(attribute='name') | sort | join(',') -%}
+            {%- set dst_list = policy.dstaddr | map(attribute='name') | sort | join(',') -%}
+            {%- set key = src_list ~ '|' ~ dst_list -%}
+            
+            {%- if key in results -%}
+              {%- set _ = results[key].append(policy) -%}
+            {%- else -%}
+              {%- set _ = results.update({key: [policy]}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          
+          {# Conserver uniquement les groupes avec plus d'une politique #}
+          {%- set duplicates = [] -%}
+          {%- for key, policies in results.items() if policies | length > 1 -%}
+            {%- set _ = duplicates.append({
+                'source_objects': key.split('|')[0],
+                'dest_objects': key.split('|')[1],
+                'policies': policies | map(attribute='policyid') | list,
+                'services': policies | map(attribute='service') | sum(start=[]) | map(attribute='name') | unique | list
+            }) -%}
+          {%- endfor -%}
+          {{ duplicates }}
+
+    # 3. Affichage du rapport
+    - name: Afficher les règles candidates à la consolidation
+      debug:
+        msg: |
+          Les règles suivantes ont la même adresse source et destination et peuvent être regroupées :
+          {% for dup in duplicated_policies %}
+          - Source(s): {{ dup.source_objects }} -> Destination(s): {{ dup.dest_objects }}
+            Règles ID à regrouper : {{ dup.policies }}
+            Services combinés (à fusionner) : {{ dup.services }}
+          {% endfor %}
+          {% if duplicated_policies | length == 0 %}
+          Aucune règle dupliquée trouvée !
+          {% endif %}
