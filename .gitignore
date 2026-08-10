@@ -1,3 +1,6 @@
 actions-runner/
 actions-runner/
 actions-runner/
+venv/
+backups/
+generated/
