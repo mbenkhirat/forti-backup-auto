@@ -2,11 +2,11 @@
 - name: GitOps - Sauvegarde FortiGate et Rétention 02
   hosts: fortigate_1
   gather_facts: false
-  connection: local
 
   vars:
     backup_dir: "./backups"
     retention_days: 7
+    # Récupère le token depuis l'option -e, l'inventaire ou la variable d'environnement
     fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
 
   tasks:
@@ -25,33 +25,36 @@
         mode: '0755'
       delegate_to: localhost
 
-    # 2. Télécharger la configuration via FortiOS Monitor API
-    - name: Télécharger la configuration via FortiOS Monitor API
-      fortinet.fortios.fortios_monitor_fact:
-        host: "{{ ansible_host }}"
-        vdom: "{{ vdom | default('root') }}"
-        access_token: "{{ fortios_token }}"
-        enable_https: true
-        ssl_verify: false
-        selector: "system_config_backup"
-        params:
-          scope: "global"
+    # 2. Télécharger la configuration via API REST FortiOS (POST)
+    - name: Télécharger la configuration via API FortiOS (POST)
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ fortios_token }}"
+        body_format: json
+        validate_certs: false
+        status_code: 200
+        return_content: true
       register: config_backup_raw
+      delegate_to: localhost
 
     # 3. Écrire le fichier .conf
     - name: Écrire le fichier de configuration .conf
       ansible.builtin.copy:
-        content: "{{ config_backup_raw.meta.raw }}"
+        content: "{{ config_backup_raw.content }}"
         dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}.conf"
         mode: '0644'
+      delegate_to: localhost
 
-    # 4. Nettoyer les fichiers de plus de X jours
+    # 4. Nettoyer les fichiers obsolètes
     - name: Rechercher les sauvegardes de plus de {{ retention_days }} jours
       ansible.builtin.find:
         paths: "{{ backup_dir }}"
         patterns: "*.conf"
         age: "{{ retention_days }}d"
       register: old_backups
+      delegate_to: localhost
 
     - name: Supprimer les sauvegardes obsolètes
       ansible.builtin.file:
@@ -59,3 +62,4 @@
         state: absent
       loop: "{{ old_backups.files }}"
       when: old_backups.matched > 0
+      delegate_to: localhost
