@@ -5,6 +5,7 @@
 
   vars:
     backup_dir: "./backups"
+    local_backup_dir: "/home/mbenkhirat//ansible-project/fortigate_local_backups"   # <-- dossier hors projet
     retention_days: 7
     fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
 
@@ -15,11 +16,18 @@
           - "ansible_date_time"
       delegate_to: localhost
 
-    - name: S'assurer que le dossier de sauvegarde existe
+    - name: S'assurer que le dossier de sauvegarde (repo) existe
       ansible.builtin.file:
         path: "{{ backup_dir }}"
         state: directory
         mode: '0755'
+      delegate_to: localhost
+
+    - name: S'assurer que le dossier de sauvegarde locale existe
+      ansible.builtin.file:
+        path: "{{ local_backup_dir }}"
+        state: directory
+        mode: '0700'
       delegate_to: localhost
 
     - name: Télécharger la configuration via API FortiOS (POST)
@@ -37,15 +45,27 @@
       delegate_to: localhost
       no_log: true
 
-    - name: Écrire le fichier de configuration .conf
+    - name: Définir le nom de fichier de sauvegarde
+      ansible.builtin.set_fact:
+        backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
+
+    - name: Écrire le fichier de configuration dans le dossier du repo
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
-        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
+        dest: "{{ backup_dir }}/{{ backup_filename }}"
         mode: '0644'
       delegate_to: localhost
       no_log: true
 
-    - name: Rechercher les sauvegardes de plus de {{ retention_days }} jours
+    - name: Écrire une copie locale hors dépôt
+      ansible.builtin.copy:
+        content: "{{ config_backup_raw.content }}"
+        dest: "{{ local_backup_dir }}/{{ backup_filename }}"
+        mode: '0600'
+      delegate_to: localhost
+      no_log: true
+
+    - name: Rechercher les sauvegardes (repo) de plus de {{ retention_days }} jours
       ansible.builtin.find:
         paths: "{{ backup_dir }}"
         patterns: "*.conf"
@@ -53,7 +73,7 @@
       register: old_backups
       delegate_to: localhost
 
-    - name: Supprimer les sauvegardes obsolètes
+    - name: Supprimer les sauvegardes obsolètes (repo)
       ansible.builtin.file:
         path: "{{ item.path }}"
         state: absent
