@@ -2,8 +2,9 @@ name: FortiGate GitOps Backup 1108
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # Tous les jours à 02:00
-  workflow_dispatch:      # Déclenchement manuel
+    # Exécution toutes les 5 minutes (pour tests)
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Permet de conserver le déclenchement manuel
 
 jobs:
   run-backup:
