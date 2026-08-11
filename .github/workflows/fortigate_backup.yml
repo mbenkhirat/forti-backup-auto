@@ -26,7 +26,7 @@ jobs:
           FORTIOS_ACCESS_TOKEN: ${{ secrets.FORTIOS_ACCESS_TOKEN }}
         run: |
           export PATH=$PATH:$HOME/.local/bin
-          ansible-playbook -i inventory.yml backup_and_clean.yml
+          ansible-playbook -i inventory.yml backup_and_clean.yml -e "fortios_access_token=${{ secrets.FORTIOS_ACCESS_TOKEN }}"
 
       - name: Commit et Push des fichiers de sauvegarde sur GitHub
         run: |

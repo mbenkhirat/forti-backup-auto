@@ -6,9 +6,11 @@
   vars:
     backup_dir: "./backups"
     retention_days: 7
+    # Sécurité en cas de variable absente
+    fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
 
   tasks:
-    # 1. Récupérer la date locale
+    # 1. Récupérer la date locale sur la machine du runner
     - name: Récupérer la date système locale
       ansible.builtin.setup:
         filter:
@@ -23,11 +25,13 @@
         mode: '0755'
       delegate_to: localhost
 
-    # 2. Télécharger la configuration depuis le FortiGate
-    - name: Télécharger la configuration via API FortiOS (POST)
+    # 2. Télécharger la configuration depuis le FortiGate via API REST (GET)
+    - name: Télécharger la configuration via API FortiOS
       ansible.builtin.uri:
-        url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global&access_token={{ fortios_access_token }}"
-        method: POST
+        url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ fortios_token }}"
         validate_certs: false
         status_code: 200
         return_content: true
@@ -38,7 +42,7 @@
     - name: Écrire le fichier de configuration .conf
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
-        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ hostvars['localhost']['ansible_date_time']['date'] }}.conf"
+        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}.conf"
         mode: '0644'
       delegate_to: localhost
 
