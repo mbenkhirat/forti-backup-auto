@@ -25,23 +25,21 @@
         mode: '0755'
       delegate_to: localhost
 
-    # 2. Télécharger la configuration depuis le FortiGate via API REST (POST)
-    - name: Télécharger la configuration via API FortiOS
-      ansible.builtin.uri:
-        url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ fortios_token }}"
-        validate_certs: false
-        status_code: 200
-        return_content: true
+    # 2. Télécharger la configuration via la collection Fortinet
+    - name: Télécharger la configuration via FortiOS Monitor API
+      fortinet.fortios.fortios_monitor_fact:
+        vdom: "{{ vdom | default('root') }}"
+        access_token: "{{ fortios_token }}"
+        selector: "system_config_backup"
+        params:
+          scope: "global"
       register: config_backup_raw
       delegate_to: localhost
 
-    # 3. Enregistrer le fichier .conf
+    # 3. Écrire le fichier .conf
     - name: Écrire le fichier de configuration .conf
       ansible.builtin.copy:
-        content: "{{ config_backup_raw.content }}"
+        content: "{{ config_backup_raw.meta.raw }}"
         dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}.conf"
         mode: '0644'
       delegate_to: localhost
