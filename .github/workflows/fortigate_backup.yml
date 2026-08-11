@@ -1,4 +1,4 @@
-name: FortiGate GitOps Backup 02
+name: FortiGate GitOps Backup 1108
 
 on:
   schedule:
