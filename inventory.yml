@@ -1,7 +1,7 @@
 all:
   hosts:
     fortigate_1:
-      ansible_host: "192.168.239.130" # Note : Votre FortiGate doit être joignable publiquement ou via un runner auto-hébergé 02
+      ansible_host: "192.168.239.130"
       ansible_network_os: fortinet.fortios.fortios
       ansible_connection: httpapi
       ansible_httpapi_use_ssl: true

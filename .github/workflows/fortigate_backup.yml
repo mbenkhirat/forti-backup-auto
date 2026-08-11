@@ -1,19 +1,19 @@
-name: FortiGate GitOps Backup 1108
+name: FortiGate GitOps Backup
 
 on:
   schedule:
-    # Exécution toutes les 5 minutes (pour tests)
-    - cron: '*/15 * * * *'
-  workflow_dispatch: # Permet de conserver le déclenchement manuel
+    # Une fois par jour à 02h00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
   run-backup:
-    runs-on: self-hosted   # Exécution sur votre VM Ubuntu locale
+    runs-on: self-hosted
 
     permissions:
       contents: write
 
-    steps:      
+    steps:
       - name: Récupérer le code du dépôt (Checkout)
         uses: actions/checkout@v4
 
@@ -27,7 +27,7 @@ jobs:
           FORTIOS_ACCESS_TOKEN: ${{ secrets.FORTIOS_ACCESS_TOKEN }}
         run: |
           export PATH=$PATH:$HOME/.local/bin
-          ansible-playbook -i inventory.yml backup_and_clean.yml -e "fortios_access_token=${{ secrets.FORTIOS_ACCESS_TOKEN }}"
+          ansible-playbook -i inventory.yml backup_and_clean.yml
 
       - name: Commit et Push des fichiers de sauvegarde sur GitHub
         run: |
@@ -40,3 +40,11 @@ jobs:
           else
             echo "Aucune modification détectée dans la configuration."
           fi
+
+      - name: Notifier en cas d'échec
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.ALERT_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"text": "❌ FortiGate GitOps Backup a échoué sur le runner '"${{ runner.name }}"' — voir Actions: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"'"}' \
+            || echo "Webhook non configuré ou indisponible, notification ignorée."

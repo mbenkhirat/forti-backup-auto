@@ -1,22 +1,19 @@
 ---
-- name: GitOps - Sauvegarde FortiGate et Rétention 1108
+- name: GitOps - Sauvegarde FortiGate et Rétention
   hosts: fortigate_1
   gather_facts: false
 
   vars:
     backup_dir: "./backups"
     retention_days: 7
-    # Récupère le token depuis l'option -e, l'inventaire ou la variable d'environnement
     fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
 
   tasks:
-    # 1. Récupérer la date locale
     - name: Récupérer la date système locale
       ansible.builtin.setup:
         filter:
           - "ansible_date_time"
       delegate_to: localhost
-      run_once: true
 
     - name: S'assurer que le dossier de sauvegarde existe
       ansible.builtin.file:
@@ -25,7 +22,6 @@
         mode: '0755'
       delegate_to: localhost
 
-    # 2. Télécharger la configuration via API REST FortiOS (POST)
     - name: Télécharger la configuration via API FortiOS (POST)
       ansible.builtin.uri:
         url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global"
@@ -36,18 +32,19 @@
         validate_certs: false
         status_code: 200
         return_content: true
+        timeout: 30
       register: config_backup_raw
       delegate_to: localhost
+      no_log: true
 
-    # 3. Écrire le fichier .conf
     - name: Écrire le fichier de configuration .conf
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
         dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}.conf"
         mode: '0644'
       delegate_to: localhost
+      no_log: true
 
-    # 4. Nettoyer les fichiers obsolètes
     - name: Rechercher les sauvegardes de plus de {{ retention_days }} jours
       ansible.builtin.find:
         paths: "{{ backup_dir }}"
