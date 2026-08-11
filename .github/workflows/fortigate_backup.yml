@@ -32,7 +32,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add backups/
+          git add -f backups/
           if ! git diff-index --quiet HEAD; then
             git commit -m "chore(backup): auto-backup FortiGate local - $(date +'%Y-%m-%d')"
             git push
