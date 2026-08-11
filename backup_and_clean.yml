@@ -40,7 +40,7 @@
     - name: Écrire le fichier de configuration .conf
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
-        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}.conf"
+        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
         mode: '0644'
       delegate_to: localhost
       no_log: true
