@@ -1,16 +1,15 @@
 # FortiGate GitOps Backup
 
-Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration d'un pare-feu FortiGate via l'API REST FortiOS, avec versioning Git et rétention automatique.
+Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration d'un pare-feu FortiGate via l'API REST FortiOS, avec versioning Git.
 
 ## Fonctionnement
 
 1. **GitHub Actions** déclenche le pipeline chaque jour à 02h00 UTC (ou manuellement via `workflow_dispatch`).
 2. Un **runner self-hosted** (VM Ubuntu locale) exécute un **playbook Ansible** qui :
    - récupère la configuration complète du FortiGate via l'API REST (`POST /api/v2/monitor/system/config/backup`),
-   - écrit le fichier `.conf` dans `backups/` (dépôt Git),
-   - écrit une **copie locale identique** dans un dossier hors dépôt (`local_backup_dir`), non versionnée,
-   - supprime les sauvegardes du dépôt de plus de 7 jours.
-3. Le pipeline **commit et push** automatiquement les nouveaux fichiers de sauvegarde vers le dépôt GitHub.
+   - écrit/écrase le fichier `.conf` dans `backups/` (dépôt Git) — **une seule version, toujours à jour**,
+   - écrit une **copie horodatée** dans un dossier hors dépôt (`local_backup_dir`), non versionnée — **historique complet, jamais purgé**.
+3. Le pipeline **commit et push** automatiquement la sauvegarde mise à jour vers le dépôt GitHub.
 4. En cas d'échec, une **notification webhook** est envoyée (optionnel).
 
 ## Structure du projet
@@ -20,12 +19,12 @@ Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration d'u
 ├── .github/
 │   └── workflows/
 │       └── fortigate-backup.yml   # Pipeline GitHub Actions
-├── backup_and_clean.yml           # Playbook Ansible (backup + rétention)
+├── backup_and_clean.yml           # Playbook Ansible (backup repo + backup local)
 ├── inventory.yml                  # Inventaire Ansible (hôte FortiGate)
-└── backups/                       # Sauvegardes versionnées dans le dépôt (.conf)
+└── backups/                       # Sauvegarde versionnée dans le dépôt (1 seul fichier .conf, écrasé à chaque run)
 
 # Hors dépôt (non versionné)
-~/fortigate_local_backups/         # Copie locale complète des sauvegardes (archive)
+~/fortigate_local_backups/         # Archive locale complète (un fichier horodaté par exécution)
 ```
 
 ## Prérequis
@@ -39,10 +38,10 @@ Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration d'u
 
 ### Secrets GitHub (Settings → Secrets and variables → Actions)
 
-| Secret | Description |
-|---|---|
-| `FORTIOS_ACCESS_TOKEN` | Token API de l'utilisateur FortiGate |
-| `ALERT_WEBHOOK_URL` | (optionnel) URL webhook pour notification en cas d'échec |
+| Secret                 | Description                                              |
+| ----------------------- | --------------------------------------------------------- |
+| `FORTIOS_ACCESS_TOKEN` | Token API de l'utilisateur FortiGate                     |
+| `ALERT_WEBHOOK_URL`    | (optionnel) URL webhook pour notification en cas d'échec |
 
 ### Inventaire (`inventory.yml`)
 
@@ -73,25 +72,33 @@ ansible-playbook -i inventory.yml backup_and_clean.yml
 
 ## Format des fichiers de sauvegarde
 
-Chaque exécution génère un fichier nommé :
+**Côté dépôt (`backups/`)** — un seul fichier, réécrit à chaque exécution :
+
+```
+<inventory_hostname>_latest.conf
+```
+
+Exemple : `fortigate_1_latest.conf`
+
+Ce choix garde un historique Git propre (un diff par run) plutôt que d'accumuler des fichiers datés dans le dépôt.
+
+**Côté local (`~/fortigate_local_backups/`)** — un fichier horodaté par exécution, jamais écrasé :
 
 ```
 <inventory_hostname>_<YYYY-MM-DD>_<HHMMSS>.conf
 ```
 
-Exemple : `fortigate_1_2026-08-11_143205.conf`
-
-L'heure dans le nom évite qu'un déclenchement manuel (`workflow_dispatch`) le même jour que le run automatique n'écrase la sauvegarde existante.
+Exemple : `fortigate_1_2026-08-14_020000.conf`
 
 ## Rétention
 
-Les sauvegardes du dépôt (`backups/`) de plus de **7 jours** (`retention_days` dans `backup_and_clean.yml`) sont automatiquement supprimées à chaque exécution. Pour conserver un historique plus long dans Git, augmenter cette valeur ou désactiver le nettoyage.
-
-La copie locale (`~/fortigate_local_backups/`) n'a **aucune rétention** appliquée actuellement — elle grossit indéfiniment comme archive complète, indépendante de Git.
+- **Dépôt (`backups/`)** : aucune rétention nécessaire — un seul fichier est maintenu, écrasé à chaque run. L'historique des versions reste néanmoins consultable via `git log -p backups/`.
+- **Local (`~/fortigate_local_backups/`)** : aucune purge appliquée — l'archive grossit indéfiniment et sert d'historique complet indépendant de Git.
 
 ## Roadmap / améliorations possibles
 
-- [ ] Chiffrement des sauvegardes avant commit
+- [ ] Chiffrement des sauvegardes avant commit (GPG)
 - [ ] Notification webhook en cas d'échec (déjà scaffoldé, à activer via secret)
 - [ ] Audit automatisé des policies (`analyze_policies.py`) intégré au pipeline
 - [ ] Approbation manuelle via AWX avant déploiement de changements
+- [ ] Installation du runner en tant que service systemd persistant
