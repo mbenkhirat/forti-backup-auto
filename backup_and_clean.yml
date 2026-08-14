@@ -2,13 +2,10 @@
 - name: GitOps - Sauvegarde FortiGate et Rétention
   hosts: fortigate_1
   gather_facts: false
-
   vars:
     backup_dir: "./backups"
     local_backup_dir: "/home/mbenkhirat//ansible-projects/fortigate_local_backups"   # <-- dossier hors projet
-    retention_days: 7
     fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
-
   tasks:
     - name: Récupérer la date système locale
       ansible.builtin.setup:
@@ -45,38 +42,26 @@
       delegate_to: localhost
       no_log: true
 
-    - name: Définir le nom de fichier de sauvegarde
+    - name: Définir le nom de fichier de sauvegarde locale (horodaté)
       ansible.builtin.set_fact:
-        backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
+        local_backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
 
-    - name: Écrire le fichier de configuration dans le dossier du repo
+    - name: Définir le nom de fichier de sauvegarde repo (fixe, écrasé à chaque run)
+      ansible.builtin.set_fact:
+        repo_backup_filename: "{{ inventory_hostname }}_latest.conf"
+
+    - name: Écrire/écraser la sauvegarde dans le dossier du repo (une seule version)
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
-        dest: "{{ backup_dir }}/{{ backup_filename }}"
+        dest: "{{ backup_dir }}/{{ repo_backup_filename }}"
         mode: '0644'
       delegate_to: localhost
       no_log: true
 
-    - name: Écrire une copie locale hors dépôt
+    - name: Écrire une copie locale hors dépôt (historique complet)
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
-        dest: "{{ local_backup_dir }}/{{ backup_filename }}"
+        dest: "{{ local_backup_dir }}/{{ local_backup_filename }}"
         mode: '0600'
       delegate_to: localhost
       no_log: true
-
-    - name: Rechercher les sauvegardes (repo) de plus de {{ retention_days }} jours
-      ansible.builtin.find:
-        paths: "{{ backup_dir }}"
-        patterns: "*.conf"
-        age: "{{ retention_days }}d"
-      register: old_backups
-      delegate_to: localhost
-
-    - name: Supprimer les sauvegardes obsolètes (repo)
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ old_backups.files }}"
-      when: old_backups.matched > 0
-      delegate_to: localhost
