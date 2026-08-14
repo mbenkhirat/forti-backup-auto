@@ -4,6 +4,7 @@
   gather_facts: false
   vars:
     local_backup_dir: "/home/mbenkhirat/ansible-projects/fortigate_local_backups"
+    reports_dir: "/home/mbenkhirat/ansible-projects/fortigate_reports"
     retention_days: 90  # Rétention de 3 mois (~90 jours)
 
   tasks:
@@ -19,6 +20,14 @@
         state: directory
         mode: '0700'
       delegate_to: localhost
+
+    - name: S'assurer que le dossier des rapports existe
+      ansible.builtin.file:
+        path: "{{ reports_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
 
     - name: Télécharger la configuration via API FortiOS (POST)
       ansible.builtin.uri:
@@ -89,15 +98,30 @@
 
     # --- Rapport Final d'exécution ---
 
-    - name: Afficher le rapport de sauvegarde
-      ansible.builtin.debug:
-        msg: |
+    - name: Construire le contenu du rapport
+      ansible.builtin.set_fact:
+        report_content: |
           ==================================================
                    RAPPORT DE SAUVEGARDE FORTIGATE          
+                   Date: {{ ansible_facts['date_time']['date'] }} {{ ansible_facts['date_time']['time'] }}
           ==================================================
           {% for host in ansible_play_hosts %}
             • {{ "%-25s" | format(host) }} : {{ hostvars[host]['backup_status'] | default('❓ Inconnu') }}
           {% endfor %}
           ==================================================
+      delegate_to: localhost
+      run_once: true
+
+    - name: Afficher le rapport dans les logs
+      ansible.builtin.debug:
+        msg: "{{ report_content }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Enregistrer le rapport dans un fichier horodaté
+      ansible.builtin.copy:
+        content: "{{ report_content }}"
+        dest: "{{ reports_dir }}/rapport_sauvegarde_{{ ansible_facts['date_time']['date'] }}_{{ ansible_facts['date_time']['time'] | replace(':','') }}.txt"
+        mode: '0644'
       delegate_to: localhost
       run_once: true
