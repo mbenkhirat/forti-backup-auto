@@ -20,38 +20,46 @@
         mode: '0700'
       delegate_to: localhost
 
-    - name: Télécharger la configuration via API FortiOS (POST)
-      ansible.builtin.uri:
-        url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ fortios_access_token }}"
-        body_format: json
-        validate_certs: false
-        status_code: 200
-        return_content: true
-        timeout: 30
-      register: config_backup_raw
-      delegate_to: localhost
-      ignore_errors: true  # Permet de continuer vers les autres FortiGate si l'un d'eux est injoignable
-      no_log: true
+    # --- Bloc de Sauvegarde avec Gestion des Échecs ---
+    - name: Exécuter la sauvegarde FortiGate
+      block:
+        - name: Télécharger la configuration via API FortiOS (POST)
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}/api/v2/monitor/system/config/backup?scope=global"
+            method: POST
+            headers:
+              Authorization: "Bearer {{ (lookup('env', 'FORTIOS_TOKENS_JSON') | from_json)[fortios_token_key] }}"
+            body_format: json
+            validate_certs: false
+            status_code: 200
+            return_content: true
+            timeout: 30
+          register: config_backup_raw
+          delegate_to: localhost
+          no_log: true
 
-    - name: Définir le nom de fichier de sauvegarde locale (horodaté par hôte)
-      ansible.builtin.set_fact:
-        local_backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
-      when: config_backup_raw is success
+        - name: Définir le nom de fichier de sauvegarde locale
+          ansible.builtin.set_fact:
+            local_backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
 
-    - name: Écrire la sauvegarde dans le dossier local
-      ansible.builtin.copy:
-        content: "{{ config_backup_raw.content }}"
-        dest: "{{ local_backup_dir }}/{{ local_backup_filename }}"
-        mode: '0600'
-      delegate_to: localhost
-      when: config_backup_raw is success
-      no_log: true
+        - name: Écrire la sauvegarde dans le dossier local
+          ansible.builtin.copy:
+            content: "{{ config_backup_raw.content }}"
+            dest: "{{ local_backup_dir }}/{{ local_backup_filename }}"
+            mode: '0600'
+          delegate_to: localhost
+          no_log: true
 
-    # --- Tâches de Rétention / Nettoyage globale (exécutées une seule fois) ---
+        - name: Enregistrer le succès de la sauvegarde
+          ansible.builtin.set_fact:
+            backup_status: "SUCCESS"
 
+      rescue:
+        - name: Enregistrer l'échec de la sauvegarde
+          ansible.builtin.set_fact:
+            backup_status: "FAILED"
+
+    # --- Tâches de Rétention / Nettoyage (exécutées une seule fois) ---
     - name: Rechercher les sauvegardes locales de plus de 90 jours
       ansible.builtin.find:
         paths: "{{ local_backup_dir }}"
@@ -71,8 +79,16 @@
       delegate_to: localhost
       run_once: true
 
-    - name: Afficher le bilan du nettoyage
+    # --- Rapport de Fin d'Exécution ---
+    - name: Générer le rapport global des sauvegardes
       ansible.builtin.debug:
-        msg: "{{ old_backups.matched }} fichier(s) de sauvegarde de plus de {{ retention_days }} jours supprimé(s)."
+        msg:
+          - "=========================================="
+          - "       RAPPORT DE SAUVEGARDE FORTIGATE    "
+          - "=========================================="
+          - "✅ SUCCÈS : {{ ansible_play_hosts | selectattr('backup_status', 'defined') | selectattr('backup_status', 'equalto', 'SUCCESS') | list }}"
+          - "❌ ÉCHECS : {{ ansible_play_hosts | selectattr('backup_status', 'defined') | selectattr('backup_status', 'equalto', 'FAILED') | list }}"
+          - "🧹 Nettoyage : {{ old_backups.matched | default(0) }} fichier(s) de plus de {{ retention_days }} jours supprimé(s)."
+          - "=========================================="
       delegate_to: localhost
       run_once: true
