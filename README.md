@@ -30,78 +30,112 @@ Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration d'u
 /home/mbenkhirat/ansible-projects/fortigate_local_backups/   # Archives .conf horodatées (rétention 90j)
 ```
 
-## Prérequis
+## ⚙️ Prérequis
 
-- Un runner GitHub Actions **self-hosted** avec accès réseau au FortiGate.
-- Ansible installé sur le runner, avec `ansible-galaxy` disponible dans `$PATH`.
-- Un **utilisateur API** créé sur le FortiGate (`config system api-user`) avec un token valide.
-- Le pare-feu doit autoriser l'IP du runner dans le `trusthost` de l'utilisateur API.
+* Un runner GitHub Actions **self-hosted** configuré avec accès réseau au FortiGate.
 
-## Configuration
 
-### Secrets GitHub (Settings → Secrets and variables → Actions)
+* Ansible et la collection `fortinet.fortios` installés sur le runner.
 
-| Secret                 | Description                                              |
-| ----------------------- | --------------------------------------------------------- |
-| `FORTIOS_ACCESS_TOKEN` | Token API de l'utilisateur FortiGate                     |
-| `ALERT_WEBHOOK_URL`    | (optionnel) URL webhook pour notification en cas d'échec |
 
-### Inventaire (`inventory.yml`)
+* Un **API User** sur le FortiGate (`config system api-user`) disposant des droits de lecture sur la configuration.
 
-Adapter `ansible_host` à l'adresse IP/hostname du FortiGate cible. Le VDOM par défaut est `root`.
 
-## Utilisation
+* L'adresse IP du runner autorisée dans les `trusthost` de l'API user FortiGate.
 
-**Déclenchement manuel :**
+
+
+---
+
+## 🔒 Configuration des Secrets & Inventaire
+
+### 1. Secrets GitHub (*Settings → Secrets and variables → Actions*)
+
+
+
+| Secret | Description |
+| --- | --- |
+| `FORTIOS_ACCESS_TOKEN` | Token de l'utilisateur API FortiGate
+
+ |
+| `ALERT_WEBHOOK_URL` | *(Optionnel)* Webhook pour alertes d'échec (Slack, Teams, etc.)
+
+ |
+
+### 2. Inventaire Ansible (`inventory.yml`)
+
+
+
+Adaptez le paramètre `ansible_host` avec l'adresse IP de votre équipement FortiGate :
+
+```yaml
+all:
+  hosts:
+    fortigate_1:
+      ansible_host: "192.168.239.130"
+      ansible_network_os: fortinet.fortios.fortios
+      ansible_connection: httpapi
+      ansible_httpapi_use_ssl: true
+      ansible_httpapi_validate_certs: false
+      ansible_httpapi_port: 443
+      vdom: "root"
+      fortios_access_token: "{{ lookup('env', 'FORTIOS_ACCESS_TOKEN') }}"
+
+```
+
+---
+
+## 📌 Format des Fichiers & Rétention
+
+* **Format du nom de fichier :**
+`<inventory_hostname>_<YYYY-MM-DD>_<HHMMSS>.conf`
+
+*Exemple :* `fortigate_1_2026-08-14_020000.conf`
+
+* **Rétention automatique :**
+Les fichiers dont la date de modification dépasse **90 jours** sont automatiquement purgés à la fin de chaque exécution du playbook.
+
+
+* **Permissions locales :**
+Le répertoire de sauvegarde locale est restreint (`mode: '0700'`) et les fichiers de configuration sont protégés (`mode: '0600'`).
+
+
+
+---
+
+## 🛠️ Utilisation
+
+### Lancement manuel via GitHub CLI
+
+
 
 ```bash
-gh workflow run "FortiGate GitOps Backup"
+gh workflow run "FortiGate Local Backup Runner"
 gh run watch
+
 ```
 
-**Test local du playbook (hors CI) :**
+### Exécution locale directe (hors CI/CD)
+
+
 
 ```bash
-export FORTIOS_ACCESS_TOKEN="votre_token"
+export FORTIOS_ACCESS_TOKEN="votre_token_api"
 ansible-playbook -i inventory.yml backup_and_clean.yml
-```
-
-## Sécurité
-
-- Le token API n'est jamais passé en argument `-e` sur la ligne de commande (évite l'exposition via `ps aux` / logs de process).
-- Les tâches manipulant le token ou le contenu de la configuration utilisent `no_log: true` pour éviter toute fuite dans les logs GitHub Actions.
-- ⚠️ Les fichiers de sauvegarde sont actuellement stockés **en clair** dans `backups/` et dans la copie locale. Une configuration FortiGate peut contenir des informations sensibles (certificats, clés, structure réseau interne). **Ce dépôt doit rester privé.**
-- La copie locale (`~/fortigate_local_backups/`) est créée avec des permissions restreintes (`0700` dossier, `0600` fichiers), accessibles uniquement à l'utilisateur du runner.
-
-## Format des fichiers de sauvegarde
-
-**Côté dépôt (`backups/`)** — un seul fichier, réécrit à chaque exécution :
 
 ```
-<inventory_hostname>_latest.conf
+
+---
+
+## 🛡️ Sécurité
+
+* Les jetons API sont chargés à partir de variables d'environnement (`FORTIOS_ACCESS_TOKEN`) ou secrets GitHub.
+
+
+* Les tâches manipulant des identifiants sensibles et le contenu du backup exécutent la directive `no_log: true` afin de prévenir les fuites de données confidentielles dans les logs GitHub Actions.
+
+
+
 ```
 
-Exemple : `fortigate_1_latest.conf`
-
-Ce choix garde un historique Git propre (un diff par run) plutôt que d'accumuler des fichiers datés dans le dépôt.
-
-**Côté local (`~/fortigate_local_backups/`)** — un fichier horodaté par exécution, jamais écrasé :
-
 ```
-<inventory_hostname>_<YYYY-MM-DD>_<HHMMSS>.conf
-```
-
-Exemple : `fortigate_1_2026-08-14_020000.conf`
-
-## Rétention
-
-- **Dépôt (`backups/`)** : aucune rétention nécessaire — un seul fichier est maintenu, écrasé à chaque run. L'historique des versions reste néanmoins consultable via `git log -p backups/`.
-- **Local (`~/fortigate_local_backups/`)** : aucune purge appliquée — l'archive grossit indéfiniment et sert d'historique complet indépendant de Git.
-
-## Roadmap / améliorations possibles
-
-- [ ] Chiffrement des sauvegardes avant commit (GPG)
-- [ ] Notification webhook en cas d'échec (déjà scaffoldé, à activer via secret)
-- [ ] Audit automatisé des policies (`analyze_policies.py`) intégré au pipeline
-- [ ] Approbation manuelle via AWX avant déploiement de changements
-- [ ] Installation du runner en tant que service systemd persistant
