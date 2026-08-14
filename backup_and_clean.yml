@@ -5,7 +5,7 @@
   vars:
     local_backup_dir: "/home/mbenkhirat/ansible-projects/fortigate_local_backups"
     fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
-    retention_days: 90  # Rétention de 3 mois (~90 jours)
+    retention_days: 1  # Rétention de 3 mois (~90 jours)
 
   tasks:
     - name: Récupérer la date système locale
