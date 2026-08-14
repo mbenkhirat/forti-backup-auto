@@ -53,14 +53,11 @@ Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration d'u
 
 
 
-| Secret | Description |
-| --- | --- |
-| `FORTIOS_ACCESS_TOKEN` | Token de l'utilisateur API FortiGate
+| Secret                 | Description                                              |
+| ----------------------- | --------------------------------------------------------- |
+| `FORTIOS_ACCESS_TOKEN` | Token API de l'utilisateur FortiGate                     |
+| `ALERT_WEBHOOK_URL`    | (optionnel) URL webhook pour notification en cas d'échec |
 
- |
-| `ALERT_WEBHOOK_URL` | *(Optionnel)* Webhook pour alertes d'échec (Slack, Teams, etc.)
-
- |
 
 ### 2. Inventaire Ansible (`inventory.yml`)
 
