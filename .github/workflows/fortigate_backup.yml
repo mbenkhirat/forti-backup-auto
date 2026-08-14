@@ -1,4 +1,4 @@
-name: FortiGate Local Backup Runner
+name: FortiGate Multi-Device Backup Runner
 
 on:
   schedule:
@@ -19,9 +19,9 @@ jobs:
           export PATH=$PATH:$HOME/.local/bin
           ansible-galaxy collection install fortinet.fortios
 
-      - name: Exécuter le Playbook de Sauvegarde Locale
+      - name: Exécuter le Playbook de Sauvegarde Multi-FortiGate
         env:
-          FORTIOS_ACCESS_TOKEN: ${{ secrets.FORTIOS_ACCESS_TOKEN }}
+          FORTIOS_TOKENS_JSON: ${{ secrets.FORTIOS_TOKENS_JSON }}
         run: |
           export PATH=$PATH:$HOME/.local/bin
           ansible-playbook -i inventory.yml backup_and_clean.yml
@@ -31,5 +31,5 @@ jobs:
         run: |
           curl -s -X POST "${{ secrets.ALERT_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
-            -d '{"text": "❌ FortiGate Local Backup a échoué sur le runner '"${{ runner.name }}"' — voir Actions: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"'"}' \
+            -d '{"text": "❌ Sauvegarde FortiGate (Multi-Device) a échoué sur le runner '"${{ runner.name }}"' — voir Actions: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"'"}' \
             || echo "Webhook non configuré ou indisponible, notification ignorée."
