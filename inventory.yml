@@ -8,7 +8,7 @@ all:
           fortios_access_token: "{{ (lookup('env', 'FORTIOS_TOKENS_JSON') | from_json)['FORTIOS_TOKEN_SITE_KEN'] }}"
 
         fortigate_rabat_01:
-          ansible_host: "192.168.239.131"
+          ansible_host: "192.168.239.130"
           vdom: "root"
           fortios_access_token: "{{ (lookup('env', 'FORTIOS_TOKENS_JSON') | from_json)['FORTIOS_TOKEN_SITE_RBT'] }}"
 
