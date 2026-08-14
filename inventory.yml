@@ -2,17 +2,17 @@ all:
   children:
     fortigates:
       hosts:
-        fortigate_site_kenitra:
+        fortigate_kenitra_01:
           ansible_host: "192.168.239.130"
           vdom: "root"
           fortios_access_token: "{{ (lookup('env', 'FORTIOS_TOKENS_JSON') | from_json)['FORTIOS_TOKEN_SITE_KEN'] }}"
 
-        fortigate_site_rabat:
+        fortigate_rabat_01:
           ansible_host: "192.168.239.131"
           vdom: "root"
           fortios_access_token: "{{ (lookup('env', 'FORTIOS_TOKENS_JSON') | from_json)['FORTIOS_TOKEN_SITE_RBT'] }}"
 
-        fortigate_datacenter:
+        fortigate_datacenter_01:
           ansible_host: "192.168.239.130"
           vdom: "root"
           fortios_access_token: "{{ (lookup('env', 'FORTIOS_TOKENS_JSON') | from_json)['FORTIOS_TOKEN_DC'] }}"
