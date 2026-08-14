@@ -14,9 +14,9 @@
           - "ansible_date_time"
       delegate_to: localhost
 
-    - name: S'assurer que le dossier de sauvegarde dédié à l'équipement existe
+    - name: S'assurer que le dossier de sauvegarde locale existe
       ansible.builtin.file:
-        path: "{{ local_backup_dir }}/{{ inventory_hostname }}"
+        path: "{{ local_backup_dir }}"
         state: directory
         mode: '0700'
       delegate_to: localhost
@@ -60,10 +60,10 @@
         local_backup_filename: "{{ inventory_hostname }}_{{ ansible_facts['date_time']['date'] }}_{{ ansible_facts['date_time']['time'] | replace(':','') }}.conf"
       when: config_backup_raw is success
 
-    - name: Écrire la sauvegarde dans le dossier dédié de l'équipement
+    - name: Écrire la sauvegarde dans le dossier local
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
-        dest: "{{ local_backup_dir }}/{{ inventory_hostname }}/{{ local_backup_filename }}"
+        dest: "{{ local_backup_dir }}/{{ local_backup_filename }}"
         mode: '0600'
       delegate_to: localhost
       when: config_backup_raw is success
@@ -71,12 +71,11 @@
 
     # --- Tâches de Rétention / Nettoyage globale ---
 
-    - name: Rechercher les sauvegardes locales de plus de 90 jours (dans tous les sous-dossiers)
+    - name: Rechercher les sauvegardes locales de plus de 90 jours
       ansible.builtin.find:
         paths: "{{ local_backup_dir }}"
         patterns: "*.conf"
         age: "{{ retention_days }}d"
-        recurse: true
         file_type: file
       register: old_backups
       delegate_to: localhost
