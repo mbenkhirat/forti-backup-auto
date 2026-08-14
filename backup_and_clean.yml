@@ -1,10 +1,12 @@
 ---
-- name: GitOps - Sauvegarde FortiGate Locale
+- name: Sauvegarde FortiGate Locale et Rétention
   hosts: fortigate_1
   gather_facts: false
   vars:
     local_backup_dir: "/home/mbenkhirat/ansible-projects/fortigate_local_backups"
     fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
+    retention_days: 90  # Rétention de 3 mois (~90 jours)
+
   tasks:
     - name: Récupérer la date système locale
       ansible.builtin.setup:
@@ -38,10 +40,34 @@
       ansible.builtin.set_fact:
         local_backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
 
-    - name: Écrire la sauvegarde dans le dossier local (hors dépôt)
+    - name: Écrire la sauvegarde dans le dossier local
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
         dest: "{{ local_backup_dir }}/{{ local_backup_filename }}"
         mode: '0600'
       delegate_to: localhost
       no_log: true
+
+    # --- Tâches de Rétention / Nettoyage (3 mois) ---
+
+    - name: Rechercher les sauvegardes locales de plus de 90 jours
+      ansible.builtin.find:
+        paths: "{{ local_backup_dir }}"
+        patterns: "*.conf"
+        age: "{{ retention_days }}d"
+        file_type: file
+      register: old_backups
+      delegate_to: localhost
+
+    - name: Supprimer les sauvegardes obsolètes
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      when: old_backups.matched > 0
+      delegate_to: localhost
+
+    - name: Afficher le bilan du nettoyage
+      ansible.builtin.debug:
+        msg: "{{ old_backups.matched }} fichier(s) de sauvegarde de plus de {{ retention_days }} jours supprimé(s)."
+      delegate_to: localhost
