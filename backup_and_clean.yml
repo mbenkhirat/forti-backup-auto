@@ -1,23 +1,15 @@
 ---
-- name: GitOps - Sauvegarde FortiGate et Rétention
+- name: GitOps - Sauvegarde FortiGate Locale
   hosts: fortigate_1
   gather_facts: false
   vars:
-    backup_dir: "./backups"
-    local_backup_dir: "/home/mbenkhirat//ansible-projects/fortigate_local_backups"   # <-- dossier hors projet
+    local_backup_dir: "/home/mbenkhirat/ansible-projects/fortigate_local_backups"
     fortios_token: "{{ fortios_access_token | default(lookup('env', 'FORTIOS_ACCESS_TOKEN')) }}"
   tasks:
     - name: Récupérer la date système locale
       ansible.builtin.setup:
         filter:
           - "ansible_date_time"
-      delegate_to: localhost
-
-    - name: S'assurer que le dossier de sauvegarde (repo) existe
-      ansible.builtin.file:
-        path: "{{ backup_dir }}"
-        state: directory
-        mode: '0755'
       delegate_to: localhost
 
     - name: S'assurer que le dossier de sauvegarde locale existe
@@ -46,19 +38,7 @@
       ansible.builtin.set_fact:
         local_backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
 
-    - name: Définir le nom de fichier de sauvegarde repo (fixe, écrasé à chaque run)
-      ansible.builtin.set_fact:
-        repo_backup_filename: "{{ inventory_hostname }}_latest.conf"
-
-    - name: Écrire/écraser la sauvegarde dans le dossier du repo (une seule version)
-      ansible.builtin.copy:
-        content: "{{ config_backup_raw.content }}"
-        dest: "{{ backup_dir }}/{{ repo_backup_filename }}"
-        mode: '0644'
-      delegate_to: localhost
-      no_log: true
-
-    - name: Écrire une copie locale hors dépôt (historique complet)
+    - name: Écrire la sauvegarde dans le dossier local (hors dépôt)
       ansible.builtin.copy:
         content: "{{ config_backup_raw.content }}"
         dest: "{{ local_backup_dir }}/{{ local_backup_filename }}"

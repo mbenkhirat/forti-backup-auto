@@ -1,4 +1,4 @@
-name: FortiGate GitOps Backup
+name: FortiGate Local Backup Runner
 
 on:
   schedule:
@@ -10,9 +10,6 @@ jobs:
   run-backup:
     runs-on: self-hosted
 
-    permissions:
-      contents: write
-
     steps:
       - name: Récupérer le code du dépôt (Checkout)
         uses: actions/checkout@v4
@@ -22,29 +19,17 @@ jobs:
           export PATH=$PATH:$HOME/.local/bin
           ansible-galaxy collection install fortinet.fortios
 
-      - name: Exécuter le Playbook de Sauvegarde
+      - name: Exécuter le Playbook de Sauvegarde Locale
         env:
           FORTIOS_ACCESS_TOKEN: ${{ secrets.FORTIOS_ACCESS_TOKEN }}
         run: |
           export PATH=$PATH:$HOME/.local/bin
           ansible-playbook -i inventory.yml backup_and_clean.yml
 
-      - name: Commit et Push des fichiers de sauvegarde sur GitHub
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f backups/
-          if ! git diff-index --quiet HEAD; then
-            git commit -m "chore(backup): auto-backup FortiGate local - $(date +'%Y-%m-%d')"
-            git push
-          else
-            echo "Aucune modification détectée dans la configuration."
-          fi
-
       - name: Notifier en cas d'échec
         if: failure()
         run: |
           curl -s -X POST "${{ secrets.ALERT_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
-            -d '{"text": "❌ FortiGate GitOps Backup a échoué sur le runner '"${{ runner.name }}"' — voir Actions: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"'"}' \
+            -d '{"text": "❌ FortiGate Local Backup a échoué sur le runner '"${{ runner.name }}"' — voir Actions: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"'"}' \
             || echo "Webhook non configuré ou indisponible, notification ignorée."
