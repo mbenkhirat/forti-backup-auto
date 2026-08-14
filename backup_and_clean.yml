@@ -48,7 +48,7 @@
 
     - name: Définir le nom de fichier de sauvegarde locale (horodaté par hôte)
       ansible.builtin.set_fact:
-        local_backup_filename: "{{ inventory_hostname }}_{{ ansible_date_time.date }}_{{ ansible_date_time.time | replace(':','') }}.conf"
+        local_backup_filename: "{{ inventory_hostname }}_{{ ansible_facts['date_time']['date'] }}_{{ ansible_facts['date_time']['time'] | replace(':','') }}.conf"
       when: config_backup_raw is success
 
     - name: Écrire la sauvegarde dans le dossier local
@@ -96,7 +96,7 @@
                    RAPPORT DE SAUVEGARDE FORTIGATE          
           ==================================================
           {% for host in ansible_play_hosts %}
-            • {{ host | rjust(25) }} : {{ hostvars[host]['backup_status'] | default('❓ Inconnu') }}
+            • {{ "%-25s" | format(host) }} : {{ hostvars[host]['backup_status'] | default('❓ Inconnu') }}
           {% endfor %}
           ==================================================
       delegate_to: localhost
