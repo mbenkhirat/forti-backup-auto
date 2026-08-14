@@ -91,13 +91,13 @@
 
     - name: Afficher le rapport de sauvegarde
       ansible.builtin.debug:
-        msg:
-          - "=================================================="
-          - "         RAPPORT DE SAUVEGARDE FORTIGATE          "
-          - "=================================================="
-          - "{% for host in ansible_play_hosts %}"
-          - "  • {{ host | rjust(25) }} : {{ hostvars[host]['backup_status'] | default('❓ Inconnu') }}"
-          - "{% endfor %}"
-          - "=================================================="
+        msg: |
+          ==================================================
+                   RAPPORT DE SAUVEGARDE FORTIGATE          
+          ==================================================
+          {% for host in ansible_play_hosts %}
+            • {{ host | rjust(25) }} : {{ hostvars[host]['backup_status'] | default('❓ Inconnu') }}
+          {% endfor %}
+          ==================================================
       delegate_to: localhost
       run_once: true
