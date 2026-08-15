@@ -2,7 +2,7 @@ name: FortiGate Multi-Device Backup Runner
 
 on:
   schedule:
-    # Une fois par jour à 02h00 UTC
+    # Once a day at 02:00 UTC
     - cron: '0 2 * * *'
   workflow_dispatch:
 
@@ -11,25 +11,25 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Récupérer le code du dépôt (Checkout)
+      - name: Check out the repository code
         uses: actions/checkout@v4
 
-      - name: S'assurer que la collection Fortinet est présente
+      - name: Ensure the Fortinet collection is installed
         run: |
           export PATH=$PATH:$HOME/.local/bin
           ansible-galaxy collection install fortinet.fortios
 
-      - name: Exécuter le Playbook de Sauvegarde Multi-FortiGate
+      - name: Run the multi-FortiGate backup playbook
         env:
           FORTIOS_TOKENS_JSON: ${{ secrets.FORTIOS_TOKENS_JSON }}
         run: |
           export PATH=$PATH:$HOME/.local/bin
           ansible-playbook -i inventory.yml backup_and_clean.yml
 
-      - name: Notifier en cas d'échec
+      - name: Notify on failure
         if: failure()
         run: |
           curl -s -X POST "${{ secrets.ALERT_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
-            -d '{"text": "❌ Sauvegarde FortiGate (Multi-Device) a échoué sur le runner '"${{ runner.name }}"' — voir Actions: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"'"}' \
-            || echo "Webhook non configuré ou indisponible, notification ignorée."
+            -d '{"text": "❌ FortiGate backup (multi-device) failed on runner '"${{ runner.name }}"' — see Actions: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"'"}' \
+            || echo "Webhook not configured or unavailable, notification skipped."

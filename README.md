@@ -1,39 +1,39 @@
 # FortiGate Multi-Site Backup Automation
 
-Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration de plusieurs pare-feux FortiGate via l'API REST FortiOS, avec stockage local structuré, rétention automatique et rapport d'exécution.
+Automation pipeline for the daily backup of multiple FortiGate firewall configurations via the FortiOS REST API, with structured local storage, automatic retention, and an execution report.
 
-## Fonctionnement
+## How it works
 
-1. **GitHub Actions** déclenche le pipeline chaque jour à 02h00 UTC (ou manuellement via `workflow_dispatch`).
-2. Un **runner self-hosted** (VM Ubuntu locale) exécute un **playbook Ansible** qui, pour **chaque FortiGate de l'inventaire** :
-   - récupère sa configuration complète via l'API REST (`POST /api/v2/monitor/system/config/backup`),
-   - écrit un fichier `.conf` horodaté dans un **sous-dossier dédié à l'équipement**, en local, hors dépôt Git,
-   - continue l'exécution même si un équipement échoue (`ignore_errors: true`), pour ne pas bloquer la sauvegarde des autres sites.
-3. Une **rétention de 90 jours** est appliquée globalement (tous équipements confondus) : les fichiers plus anciens sont supprimés à chaque run.
-4. Un **rapport d'exécution** récapitulatif (succès/échec par équipement) est généré et enregistré en local à chaque run.
-5. En cas d'échec du job, une **notification webhook** est envoyée avec un lien direct vers le run GitHub Actions.
+1. **GitHub Actions** triggers the pipeline every day at 02:00 UTC (or manually via `workflow_dispatch`).
+2. A **self-hosted runner** (local Ubuntu VM) executes an **Ansible playbook** that, for **each FortiGate in the inventory**:
+   - retrieves its full configuration via the REST API (`POST /api/v2/monitor/system/config/backup`),
+   - writes a timestamped `.conf` file into a **dedicated per-device subfolder**, locally, outside the Git repo,
+   - continues execution even if a device fails (`ignore_errors: true`), so that a single site failure doesn't block backups for the others.
+3. A **90-day retention** policy is applied globally (across all devices): older files are automatically deleted on every run.
+4. A summary **execution report** (success/failure per device) is generated and saved locally on every run.
+5. On job failure, a **webhook notification** is sent with a direct link to the GitHub Actions run.
 
-⚠️ **Aucune donnée de configuration n'est stockée ou versionnée dans le dépôt GitHub.** Seul le code d'automatisation (playbook, inventaire, workflow) y est présent. Les sauvegardes et rapports restent exclusivement sur la machine du runner.
+⚠️ **No configuration data is stored or versioned in the GitHub repository.** Only the automation code (playbook, inventory, workflow) lives there. Backups and reports remain exclusively on the runner machine.
 
-## Équipements couverts
+## Devices covered
 
-| Site | Hostname (inventaire) |
+| Site | Hostname (inventory) |
 |---|---|
 | Kenitra | `fortigate_kenitra_01` |
 | Rabat | `fortigate_rabat_01` |
 | Datacenter | `fortigate_datacenter_01` |
 
-## Structure du projet
+## Project structure
 
 ```
 .
 ├── .github/
 │   └── workflows/
-│       └── fortigate_backup.yml   # Pipeline GitHub Actions
-├── backup_and_clean.yml           # Playbook Ansible (backup multi-sites + rétention + rapport)
-├── inventory.yml                  # Inventaire Ansible (3 FortiGate)
+│       └── fortigate_backup.yml   # GitHub Actions pipeline
+├── backup_and_clean.yml           # Ansible playbook (multi-site backup + retention + report)
+├── inventory.yml                  # Ansible inventory (3 FortiGate devices)
 
-# Hors dépôt (non versionné, local au runner)
+# Outside the repo (not versioned, local to the runner)
 ~/fortigate_local_backups/
 ├── fortigate_kenitra_01/
 │   └── fortigate_kenitra_01_2026-08-15_020000.conf
@@ -46,104 +46,104 @@ Pipeline d'automatisation pour la sauvegarde quotidienne de la configuration de 
 └── rapport_sauvegarde_2026-08-15_020000.txt
 ```
 
-## Prérequis
+## Requirements
 
-- Un runner GitHub Actions **self-hosted** avec accès réseau aux trois FortiGate.
-- Ansible installé sur le runner (`ansible-galaxy` disponible dans `$PATH`).
-- La collection **`fortinet.fortios`** (installée automatiquement par le pipeline à chaque run).
-- Un **utilisateur API** créé sur chaque FortiGate (`config system api-user`) avec un token valide.
-- Chaque pare-feu doit autoriser l'IP du runner dans le `trusthost` de son utilisateur API.
+- A **self-hosted** GitHub Actions runner with network access to all three FortiGate devices.
+- Ansible installed on the runner (`ansible-galaxy` available in `$PATH`).
+- The **`fortinet.fortios`** collection (installed automatically by the pipeline on every run).
+- An **API user** created on each FortiGate (`config system api-user`) with a valid token.
+- Each firewall must allow the runner's IP in its API user's `trusthost`.
 
 ## Configuration
 
-### Secrets GitHub (Settings → Secrets and variables → Actions)
+### GitHub Secrets (Settings → Secrets and variables → Actions)
 
 | Secret | Description |
 |---|---|
-| `FORTIOS_TOKENS_JSON` | Objet JSON contenant un token API par site (voir format ci-dessous) |
-| `ALERT_WEBHOOK_URL` | (optionnel) URL webhook pour notification en cas d'échec du job |
+| `FORTIOS_TOKENS_JSON` | JSON object containing one API token per site (see format below) |
+| `ALERT_WEBHOOK_URL` | (optional) Webhook URL for failure notifications |
 
-**Format de `FORTIOS_TOKENS_JSON`** :
+**`FORTIOS_TOKENS_JSON` format:**
 
 ```json
 {
-  "FORTIOS_TOKEN_SITE_KEN": "token_api_kenitra",
-  "FORTIOS_TOKEN_SITE_RBT": "token_api_rabat",
-  "FORTIOS_TOKEN_DC": "token_api_datacenter"
+  "FORTIOS_TOKEN_SITE_KEN": "kenitra_api_token",
+  "FORTIOS_TOKEN_SITE_RBT": "rabat_api_token",
+  "FORTIOS_TOKEN_DC": "datacenter_api_token"
 }
 ```
 
-Chaque hôte de l'inventaire référence sa clé correspondante via un lookup Jinja :
+Each inventory host references its matching key through a Jinja lookup:
 
 ```yaml
 fortios_access_token: "{{ (lookup('env', 'FORTIOS_TOKENS_JSON') | from_json)['FORTIOS_TOKEN_SITE_KEN'] }}"
 ```
 
-Ce format centralise tous les tokens dans un seul secret plutôt qu'un secret par équipement, ce qui simplifie l'ajout d'un nouveau site à l'inventaire (une seule variable GitHub à mettre à jour).
+This centralizes every token in a single secret instead of one secret per device, which simplifies adding a new site to the inventory (only one GitHub variable to update).
 
-### Inventaire (`inventory.yml`)
+### Inventory (`inventory.yml`)
 
-Groupe `fortigates`, un hôte par site. Ajouter un nouvel équipement = ajouter une entrée `hosts` + sa clé de token dans `FORTIOS_TOKENS_JSON`.
+Group `fortigates`, one host per site. Adding a new device = add a `hosts` entry + its token key in `FORTIOS_TOKENS_JSON`.
 
-## Utilisation
+## Usage
 
-**Déclenchement manuel :**
+**Manual trigger:**
 
 ```bash
 gh workflow run "FortiGate Multi-Device Backup Runner"
 gh run watch
 ```
 
-**Test local du playbook (hors CI) :**
+**Local playbook test (outside CI):**
 
 ```bash
 export FORTIOS_TOKENS_JSON='{"FORTIOS_TOKEN_SITE_KEN":"...","FORTIOS_TOKEN_SITE_RBT":"...","FORTIOS_TOKEN_DC":"..."}'
 ansible-playbook -i inventory.yml backup_and_clean.yml
 ```
 
-## Sécurité
+## Security
 
-- Le token API n'est jamais passé en argument `-e` sur la ligne de commande (évite l'exposition via `ps aux` / logs de process).
-- Les tâches manipulant un token ou le contenu d'une configuration utilisent `no_log: true` pour éviter toute fuite dans les logs GitHub Actions.
-- **Aucune configuration FortiGate n'est écrite dans le dépôt Git** — élimine le risque de fuite de données sensibles (certificats, clés, structure réseau interne) via l'historique Git, même en cas de compromission future du repo.
-- Les fichiers de sauvegarde locaux sont créés avec des permissions restreintes (`0700` dossier, `0600` fichiers), accessibles uniquement à l'utilisateur du runner.
-- L'échec d'un équipement (`ignore_errors: true`) n'expose pas de détails du token ou de la config dans les logs — seul le statut ✅/❌ apparaît dans le rapport.
+- The API token is never passed as a command-line `-e` argument (avoids exposure via `ps aux` / process logs).
+- Tasks handling a token or configuration content use `no_log: true` to prevent any leakage into GitHub Actions logs.
+- **No FortiGate configuration is ever written to the Git repo** — eliminates the risk of leaking sensitive data (certificates, keys, internal network layout) through Git history, even if the repo were compromised in the future.
+- Local backup files are created with restricted permissions (`0700` directory, `0600` files), accessible only to the runner's user.
+- A device failure (`ignore_errors: true`) doesn't expose token or configuration details in the logs — only the ✅/❌ status appears in the report.
 
-## Format des fichiers de sauvegarde
+## Backup file format
 
-Un fichier horodaté par équipement et par exécution, dans son sous-dossier dédié :
+One timestamped file per device and per run, in its dedicated subfolder:
 
 ```
 <inventory_hostname>_<YYYY-MM-DD>_<HHMMSS>.conf
 ```
 
-Exemple : `fortigate_kenitra_01_2026-08-15_020000.conf`
+Example: `fortigate_kenitra_01_2026-08-15_020000.conf`
 
-## Rétention
+## Retention
 
-Une rétention de **90 jours** (`retention_days` dans `backup_and_clean.yml`) est appliquée à l'ensemble de `~/fortigate_local_backups/` (recherche récursive dans tous les sous-dossiers d'équipement) : tout fichier `.conf` plus ancien est supprimé automatiquement à chaque exécution. Le nombre de fichiers supprimés est affiché dans les logs du run.
+A **90-day** retention policy (`retention_days` in `backup_and_clean.yml`) is applied across the entirety of `~/fortigate_local_backups/` (recursive search across all device subfolders): any `.conf` file older than that is automatically deleted on every run. The number of deleted files is shown in the run logs.
 
-## Rapport d'exécution
+## Execution report
 
-À chaque run, un rapport texte récapitulatif est généré dans `~/fortigate_reports/`, listant le statut (✅ Réussi / ❌ Échoué) de chaque équipement :
+On every run, a summary text report is generated in `~/fortigate_reports/`, listing the status (✅ Success / ❌ Failed) of each device:
 
 ```
 ==================================================
-         RAPPORT DE SAUVEGARDE FORTIGATE
+         FORTIGATE BACKUP REPORT
          Date: 2026-08-15 02:00:00
 ==================================================
-  fortigate_kenitra_01      : ✅ Réussi
-  fortigate_rabat_01        : ✅ Réussi
-  fortigate_datacenter_01   : ❌ Échoué
+  fortigate_kenitra_01      : ✅ Success
+  fortigate_rabat_01        : ✅ Success
+  fortigate_datacenter_01   : ❌ Failed
 ==================================================
 ```
 
-Ce rapport reste local (non versionné) et permet un diagnostic rapide sans avoir à consulter les logs complets du run GitHub Actions.
+This report stays local (not versioned) and allows for a quick diagnosis without needing to review the full GitHub Actions run logs.
 
-## Roadmap / améliorations possibles
+## Roadmap / possible improvements
 
-- [ ] Chiffrement GPG des sauvegardes locales
-- [ ] Réplication de l'archive locale vers un stockage distant (S3 / Azure Blob) pour la résilience en cas de perte du runner
-- [ ] Envoi du rapport d'exécution par email ou webhook (au-delà de la simple notification d'échec)
-- [ ] Audit automatisé des policies (`analyze_policies.py`) intégré au pipeline
-- [ ] Ajout de nouveaux sites via une entrée d'inventaire simple (déjà largement facilité par le format `FORTIOS_TOKENS_JSON`)
+- [ ] GPG encryption of local backups
+- [ ] Replication of the local archive to remote storage (S3 / Azure Blob) for resilience in case the runner is lost
+- [ ] Sending the execution report by email or webhook (beyond the current failure-only notification)
+- [ ] Automated policy audit (`analyze_policies.py`) integrated into the pipeline
+- [ ] Adding new sites via a simple inventory entry (already largely enabled by the `FORTIOS_TOKENS_JSON` format)
