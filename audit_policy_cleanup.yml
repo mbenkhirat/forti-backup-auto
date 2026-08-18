@@ -21,6 +21,15 @@
         delete_threshold_epoch: "{{ (ansible_facts['date_time']['epoch'] | int) - (inactivity_delete_days * 86400) }}"
       delegate_to: localhost
 
+
+    - name: Ensure the reports folder exists
+      ansible.builtin.file:
+        path: "{{ reports_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true  
+
     # -----------------------------------------------------------------
     # 1. Récupération des politiques et de leurs statistiques
     # -----------------------------------------------------------------
