@@ -31,7 +31,7 @@ jobs:
           FORTIOS_TOKENS_JSON: ${{ secrets.FORTIOS_TOKENS_JSON }}
         run: |
           export PATH=$PATH:$HOME/.local/bin
-          ansible-playbook -i inventory.ini audit_policy_cleanup.yml
+          ansible-playbook -i inventory.yml audit_policy_cleanup.yml
 
       - name: Archiver les rapports d'audit
         if: always()
