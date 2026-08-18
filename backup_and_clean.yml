@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     local_backup_dir: "/home/mbenkhirat/ansible-projects/fortigate_local_backups"
-    reports_dir: "/home/mbenkhirat/ansible-projects/fortigate_reports"
+    reports_dir: "/home/mbenkhirat/ansible-projects/fortigate_backup_reports"
     retention_days: 90  # 3-month retention (~90 days)
 
   tasks:
