@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     reports_dir: "/home/mbenkhirat/ansible-projects/fortigate_audit_reports"
-    inactivity_disable_days: 180  # ~6 mois
+    inactivity_disable_days: 2  # ~6 mois
     inactivity_delete_days: 90    # ~3 mois
 
   tasks:
