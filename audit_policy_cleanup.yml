@@ -4,31 +4,27 @@
   gather_facts: false
   vars:
     reports_dir: "/home/mbenkhirat/ansible-projects/fortigate_audit_reports"
-    inactivity_disable_days: 180  # ~6 mois sans trafic -> Désactivation
-    inactivity_delete_days: 90    # ~3 mois désactivée -> Suppression définitive
+    inactivity_disable_days: 180  # ~6 mois
+    inactivity_delete_days: 90    # ~3 mois
 
   tasks:
-    # -----------------------------------------------------------------
-    # Initialisation & Préréquis
-    # -----------------------------------------------------------------
     - name: Récupérer la date/heure courante
       ansible.builtin.setup:
         filter:
           - "ansible_date_time"
       delegate_to: localhost
 
-    - name: Assurer l'existence du dossier de rapports
-      ansible.builtin.file:
-        path: "{{ reports_dir }}"
-        state: directory
-        mode: '0755'
+    - name: Calculer les timestamps de référence (epoch seconds)
+      ansible.builtin.set_fact:
+        now_epoch: "{{ ansible_facts['date_time']['epoch'] | int }}"
+        disable_threshold_epoch: "{{ (ansible_facts['date_time']['epoch'] | int) - (inactivity_disable_days * 86400) }}"
+        delete_threshold_epoch: "{{ (ansible_facts['date_time']['epoch'] | int) - (inactivity_delete_days * 86400) }}"
       delegate_to: localhost
-      run_once: true
 
     # -----------------------------------------------------------------
-    # 1. Collecte des données via l'API FortiOS
+    # 1. Récupération des politiques et de leurs statistiques
     # -----------------------------------------------------------------
-    - name: Récupérer la configuration des politiques de sécurité (CMDB)
+    - name: Récupérer la liste complète des règles de sécurité (Configuration)
       ansible.builtin.uri:
         url: "https://{{ ansible_host }}/api/v2/cmdb/firewall/policy"
         method: GET
@@ -36,13 +32,11 @@
           Authorization: "Bearer {{ fortios_access_token }}"
         validate_certs: false
         status_code: 200
-        timeout: 30
-      register: cmdb_policies_raw
+      register: cmdb_policies
       delegate_to: localhost
-      ignore_errors: true
       no_log: true
 
-    - name: Récupérer les statistiques d'utilisation / hit-count (Monitor)
+    - name: Récupérer le hit-count / stats des règles (Monitor API)
       ansible.builtin.uri:
         url: "https://{{ ansible_host }}/api/v2/monitor/firewall/policy"
         method: GET
@@ -50,148 +44,81 @@
           Authorization: "Bearer {{ fortios_access_token }}"
         validate_certs: false
         status_code: 200
-        timeout: 30
-      register: monitor_policies_raw
+      register: monitor_policies
       delegate_to: localhost
-      ignore_errors: true
       no_log: true
 
     # -----------------------------------------------------------------
-    # 2. Analyse et Traitement des Règles
+    # 2. Étape A : Désactiver les règles inactives (> 6 mois)
     # -----------------------------------------------------------------
-    - name: Traiter et corréler les données si les appels API ont réussi
-      when: 
-        - cmdb_policies_raw is success
-        - monitor_policies_raw is success
-        - cmdb_policies_raw.json.results is defined
-        - monitor_policies_raw.json.results is defined
-      block:
-        - name: Définir la liste des Policy IDs inactives (> 6 mois ou jamais utilisées)
-          ansible.builtin.set_fact:
-            inactive_disable_ids: >-
-              {{
-                monitor_policies_raw.json.results
-                | selectattr('last_used', 'defined')
-                | selectattr('last_used', 'less_than_equal', (ansible_facts['date_time']['epoch'] | int) - (inactivity_disable_days * 86400))
-                | map(attribute='policyid') | list
-              }}
-            inactive_delete_ids: >-
-              {{
-                monitor_policies_raw.json.results
-                | selectattr('last_used', 'defined')
-                | selectattr('last_used', 'less_than_equal', (ansible_facts['date_time']['epoch'] | int) - (inactivity_delete_days * 86400))
-                | map(attribute='policyid') | list
-              }}
-
-        - name: Identifier les règles actives à désactiver (> 6 mois d'inactivité)
-          ansible.builtin.set_fact:
-            policies_to_disable: >-
-              {{
-                cmdb_policies_raw.json.results
-                | selectattr('status', 'defined')
-                | selectattr('status', 'equalto', 'enable')
-                | selectattr('policyid', 'in', inactive_disable_ids)
-                | list
-              }}
-
-        - name: Identifier les règles déjà désactivées à supprimer (> 3 mois inactives)
-          ansible.builtin.set_fact:
-            policies_to_delete: >-
-              {{
-                cmdb_policies_raw.json.results
-                | selectattr('status', 'defined')
-                | selectattr('status', 'equalto', 'disable')
-                | selectattr('policyid', 'in', inactive_delete_ids)
-                | list
-              }}
-
-        # --- Actions de modification sur le FortiGate ---
-
-        - name: Désactiver (Disable) les règles inactives (> 6 mois)
-          ansible.builtin.uri:
-            url: "https://{{ ansible_host }}/api/v2/cmdb/firewall/policy/{{ item.policyid }}"
-            method: PUT
-            headers:
-              Authorization: "Bearer {{ fortios_access_token }}"
-            body_format: json
-            body:
-              status: "disable"
-              comments: "Désactivé automatiquement par Ansible - Inactif > 6 mois (Audit le {{ ansible_facts['date_time']['date'] }})"
-            validate_certs: false
-            status_code: 200
-          loop: "{{ policies_to_disable }}"
-          when: policies_to_disable | length > 0
-          delegate_to: localhost
-          ignore_errors: true
-
-        - name: Supprimer définitivement (DELETE) les règles désactivées (> 3 mois)
-          ansible.builtin.uri:
-            url: "https://{{ ansible_host }}/api/v2/cmdb/firewall/policy/{{ item.policyid }}"
-            method: DELETE
-            headers:
-              Authorization: "Bearer {{ fortios_access_token }}"
-            validate_certs: false
-            status_code: 200
-          loop: "{{ policies_to_delete }}"
-          when: policies_to_delete | length > 0
-          delegate_to: localhost
-          ignore_errors: true
-
-        - name: Définir le statut du job pour l'hôte
-          ansible.builtin.set_fact:
-            audit_status: "✅ Succès"
-
-    - name: Marquer l'échec en cas de problème d'API
+    - name: Identifier les règles actives inactives depuis plus de 6 mois
       ansible.builtin.set_fact:
-        audit_status: "❌ Échec (Erreur API / Connexion)"
-        policies_to_disable: []
-        policies_to_delete: []
-      when: cmdb_policies_raw is failed or monitor_policies_raw is failed
+        policies_to_disable: "{{ cmdb_policies.json.results | selectattr('status', 'defined') | selectattr('status', 'equalto', 'enable') | selectattr('policyid', 'in', (monitor_policies.json.results | selectattr('last_used', 'defined') | selectattr('last_used', 'less_than', disable_threshold_epoch | int) | map(attribute='policyid') | list)) | list }}"
 
-    # -----------------------------------------------------------------
-    # 3. Consolidation du Rapport Global multi-équipements
-    # -----------------------------------------------------------------
-    - name: Construire le rapport d'audit synthétique
-      ansible.builtin.set_fact:
-        global_audit_report: |
-          ==================================================================
-                           RAPPORT GLOBAL D'AUDIT FORTIGATE
-                  Date: {{ ansible_facts['date_time']['date'] }} {{ ansible_facts['date_time']['time'] }}
-          ==================================================================
-          {% for host in ansible_play_hosts %}
-          ------------------------------------------------------------------
-          Équipement : {{ host }}
-          Statut     : {{ hostvars[host]['audit_status'] | default('❓ Inconnu') }}
-          ------------------------------------------------------------------
-          • Règles désactivées (> {{ inactivity_disable_days }} jours inactives) : {{ hostvars[host]['policies_to_disable'] | default([]) | length }}
-          {% for p in hostvars[host]['policies_to_disable'] | default([]) %}
-            - [ID: {{ p.policyid }}] {{ p.name | default('Sans Nom') }} (src: {{ p.srcintf[0].q_origin | default('N/A') }} -> dst: {{ p.dstintf[0].q_origin | default('N/A') }})
-          {% else %}
-            - Aucune règle à désactiver.
-          {% endfor %}
-
-          • Règles supprimées (> {{ inactivity_delete_days }} jours désactivées) : {{ hostvars[host]['policies_to_delete'] | default([]) | length }}
-          {% for p in hostvars[host]['policies_to_delete'] | default([]) %}
-            - [ID: {{ p.policyid }}] {{ p.name | default('Sans Nom') }}
-          {% else %}
-            - Aucune règle à supprimer.
-          {% endfor %}
-
-          {% endfor %}
-          ==================================================================
+    - name: Désactiver (Disable) les règles inactives (> 6 mois)
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/v2/cmdb/firewall/policy/{{ item.policyid }}"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ fortios_access_token }}"
+        body_format: json
+        body:
+          status: "disable"
+          comments: "Désactivé automatiquement par Ansible (Inactif > 6 mois le {{ ansible_facts['date_time']['date'] }})"
+        validate_certs: false
+        status_code: 200
+      loop: "{{ policies_to_disable }}"
+      when: policies_to_disable | length > 0
       delegate_to: localhost
-      run_once: true
 
-    - name: Afficher le bilan global dans la console
+    # -----------------------------------------------------------------
+    # 3. Étape B : Supprimer les règles désactivées (> 3 mois)
+    # -----------------------------------------------------------------
+    - name: Identifier les règles désactivées depuis plus de 3 mois
+      ansible.builtin.set_fact:
+        policies_to_delete: "{{ cmdb_policies.json.results | selectattr('status', 'defined') | selectattr('status', 'equalto', 'disable') | selectattr('policyid', 'in', (monitor_policies.json.results | selectattr('last_used', 'defined') | selectattr('last_used', 'less_than', delete_threshold_epoch | int) | map(attribute='policyid') | list)) | list }}"
+
+    - name: Supprimer définitivement (DELETE) les règles désactivées (> 3 mois)
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/v2/cmdb/firewall/policy/{{ item.policyid }}"
+        method: DELETE
+        headers:
+          Authorization: "Bearer {{ fortios_access_token }}"
+        validate_certs: false
+        status_code: 200
+      loop: "{{ policies_to_delete }}"
+      when: policies_to_delete | length > 0
+      delegate_to: localhost
+
+    # -----------------------------------------------------------------
+    # 4. Rapport d'Audit
+    # -----------------------------------------------------------------
+    - name: Générer le bilan d'audit
+      ansible.builtin.set_fact:
+        audit_report: |
+          ==================================================
+                 RAPPORT D'AUDIT ET NETTOYAGE POLITIQUE
+                 Équipement: {{ inventory_hostname }}
+                 Date: {{ ansible_facts['date_time']['date'] }} {{ ansible_facts['date_time']['time'] }}
+          ==================================================
+          • Règles désactivées (> 6 mois d'inactivité) : {{ policies_to_disable | length }}
+            {% for p in policies_to_disable %}
+            - Policy ID: {{ p.policyid }} | Nom: {{ p.name | default('Sans nom') }}
+            {% endfor %}
+
+          • Règles supprimées (> 3 mois désactivées/inactives) : {{ policies_to_delete | length }}
+            {% for p in policies_to_delete %}
+            - Policy ID: {{ p.policyid }} | Nom: {{ p.name | default('Sans nom') }}
+            {% endfor %}
+          ==================================================
+
+    - name: Afficher le rapport dans la console
       ansible.builtin.debug:
-        msg: "{{ global_audit_report }}"
-      delegate_to: localhost
-      run_once: true
+        msg: "{{ audit_report }}"
 
-    - name: Enregistrer le rapport global dans un fichier horodaté
+    - name: Enregistrer le rapport d'audit
       ansible.builtin.copy:
-        content: "{{ global_audit_report }}"
-        dest: "{{ reports_dir }}/audit_report_{{ ansible_facts['date_time']['date'] }}_{{ ansible_facts['date_time']['time'] | replace(':','') }}.txt"
+        content: "{{ audit_report }}"
+        dest: "{{ reports_dir }}/audit_rules_{{ inventory_hostname }}_{{ ansible_facts['date_time']['date'] }}.txt"
         mode: '0644'
       delegate_to: localhost
-      run_once: true
