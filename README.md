@@ -26,20 +26,18 @@ Automation pipeline for the daily backup of multiple FortiGate firewall configur
 ## Project structure
 
 ```
-backup_project/
+.
 ├── .github/
 │   └── workflows/
-│       └── fortigate_backup.yml         # déclenchement CI/CD (GitHub Actions, runner self-hosted)
+│       └── fortigate_backup.yml          # CI/CD trigger (GitHub Actions, self-hosted runner)
 ├── backup_reports/
-│   └── backup_report_<timestamp>.txt     # rapport global du run (généré, non versionné)
+│   └── backup_report_<timestamp>.txt     # global run report (generated, not version-controlled)
 ├── local_backups/
-│   ├── fortigate_datacenter_01/
-│   │   └── fortigate_datacenter_01_<timestamp>.conf
-│   └── fortigate_kenitra_01/
-│       └── fortigate_kenitra_01_<timestamp>.conf
+│   └── fortigate_site_01/
+│       └── fortigate_site_01_<timestamp>.conf    # backup file .conf (generated, not version-controlled)
 ├── .gitignore
-├── backup_and_clean.yml                  # playbook principal
-├── inventory.yml                         # inventaire des FortiGate
+├── backup_and_clean.yml                  # main playbook
+├── inventory.yml                         # FortiGate inventory
 └── README.md
 ```
 
